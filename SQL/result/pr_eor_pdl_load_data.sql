@@ -701,7 +701,6 @@ FROM pdl.idw_arj_pdl_contact_infos WHERE load_id = 1567806034 AND create_user = 
 ORDER BY table_name;
 
 -- Детальная проверка по system_id
-/*
 SELECT 
     a.system_id,
     a.full_name,
@@ -712,4 +711,3 @@ SELECT
 FROM pdl.idw_arj_interfax_pdl a
 WHERE a.load_id = 1567806034
 ORDER BY a.system_id;
-*/
