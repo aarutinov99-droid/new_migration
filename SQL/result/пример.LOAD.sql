@@ -1,6 +1,6 @@
 -- DROP PROCEDURE eor.pr_eor_ba_contract_ins_load(int8, int2, int2);
 
-CREATE OR REPLACE PROCEDURE eor.pr_eor_pdl_load(IN p_process_log_id bigint, IN p_cnt_flow smallint DEFAULT NULL::smallint, IN p_num_flow smallint DEFAULT NULL::smallint)
+CREATE OR REPLACE PROCEDURE eor.pr_eor_ba_contract_ins_load(IN p_process_log_id bigint, IN p_cnt_flow smallint DEFAULT NULL::smallint, IN p_num_flow smallint DEFAULT NULL::smallint)
  LANGUAGE plpgsql
  SECURITY DEFINER
 AS $procedure$ 
@@ -10,8 +10,8 @@ declare
 
 	-- использовать параметры p_cnt_flow, p_null_flow по default!!!
  
-	l_process process_info.process_state.process_alias%type := 'PR_EOR_PDL_LOAD';
-	l_procedure text := 'eor.pr_eor_pdl_load';
+	l_process process_info.process_state.process_alias%type := 'EOR_BA_CONTRACT_INS_LOAD_PG';
+	l_procedure text := 'fors_pg.eor.pr_eor_ba_contract_ins_load';
 
   	l_process_data process_info.process_state%rowtype;
 	l_batch_size int;
@@ -52,85 +52,85 @@ raise notice 'l_proc_id:%',l_proc_id::text;
     call process_info.pr_helper_log(l_procedure,'Начало процесса: ' || l_process, l_proc_id::text);
 
 	-- читаем настройки процесса
-    select *
-    into strict l_process_data
-    from process_info.process_state
-    where process_alias = l_process;
+--    select *
+--    into strict l_process_data
+--    from process_info.process_state
+--    where process_alias = l_process;
 
-    l_batch_size := coalesce(l_process_data.batch_size, 200);
+--    l_batch_size := coalesce(l_process_data.batch_size, 200);
 
-	case
-	when not l_process_data.can_run in ('1', '2') 
-	then
-    
-		call process_info.pr_helper_log(l_procedure, 'Процесс оостановлен пользователем, выход', l_proc_id::text);
-		call process_manage.write_message(l_proc_id, 'Процесс оостановлен пользователем!');
+--	case
+--	when not l_process_data.can_run in ('1', '2') 
+--	then
+--    
+--		call process_info.pr_helper_log(l_procedure, 'Процесс оостановлен пользователем, выход', l_proc_id::text);
+--		call process_manage.write_message(l_proc_id, 'Процесс оостановлен пользователем!');
+--
+--		case
+--		when p_process_log_id is null 
+--		then call process_manage.finish_process(l_proc_id,  null);
+--		else null;
+--		end case;
+--
+--       	return;
+--
+--	else null;
+--    end case;
 
-		case
-		when p_process_log_id is null 
-		then call process_manage.finish_process(l_proc_id,  null);
-		else null;
-		end case;
-
-       	return;
-
-	else null;
-    end case;
-
-	l_error_sign := 
-		case 
-		when l_process_data.can_run = '1'::bpchar(1) 
-		then false 
-		else true 
-		end;
-
-    case
-	when l_error_sign 
-	then 
-		
-		call process_info.pr_helper_log(l_procedure , 'Начало, режим обработки ошибок', l_proc_id::text);
-		call process_manage.write_message(l_proc_id, 'Режим обработки ошибок.');
-
-    else 
-		
-		call process_info.pr_helper_log(l_procedure, 'Начало, нормальный режим', l_proc_id::text);
-		call process_manage.write_message(l_proc_id, 'Нормальный режим обработки.');
-
-    end case;
+--	l_error_sign := 
+--		case 
+--		when l_process_data.can_run = '1'::bpchar(1) 
+--		then false 
+--		else true 
+--		end;
+--
+--    case
+--	when l_error_sign 
+--	then 
+--		
+--		call process_info.pr_helper_log(l_procedure , 'Начало, режим обработки ошибок', l_proc_id::text);
+--		call process_manage.write_message(l_proc_id, 'Режим обработки ошибок.');
+--
+--    else 
+--		
+--		call process_info.pr_helper_log(l_procedure, 'Начало, нормальный режим', l_proc_id::text);
+--		call process_manage.write_message(l_proc_id, 'Нормальный режим обработки.');
+--
+--    end case;
 
 	-- проверяем, не много ли накопилось ошибок
-    select count(8) 
-    into strict l_err_cnt 
-    from process_info.idw_sy_workflow_error
-    where 
-			workflow_id = l_process_data.workflow_id
-   		and state_id = l_process_data.state_id;
-     
-	case
-	when 
-			l_err_cnt >= coalesce(l_process_data.max_error, 1000)::int
-		and not l_error_sign 
-	then 
-    	
-        call process_info.pr_helper_log(l_procedure, 'Превышен лимит ошибок (' || coalesce(l_process_data.max_error, 1000) || ') в регламентном процессе! Выход.', l_proc_id::text); 
-        
-		call process_manage.write_error(
-			 l_proc_id --Yefremov p_process_log_id 	-- ИД процесса
-			,'Накопилось много ошибок!!! Запустите процесс "' || l_process || '" в режиме обработки ошибок!'
-			,'Накопилось много ошибок (' || l_err_cnt || ')!!! В таблице fors_pg.process_info.process_state для процесса "' || l_process || '" максимальное кол-во ошибок ' || l_process_data.max_error || '!'
-			,'Ошибки данных'
-		);
-			   
-        case
-		when p_process_log_id is null
-		then call process_manage.finish_process(l_proc_id, null);
-		else null;
-		end case;
-	
-       	return;
-
-	else null;
-    end case;
+--    select count(8) 
+--    into strict l_err_cnt 
+--    from process_info.idw_sy_workflow_error
+--    where 
+--			workflow_id = l_process_data.workflow_id
+--   		and state_id = l_process_data.state_id;
+--     
+--	case
+--	when 
+--			l_err_cnt >= coalesce(l_process_data.max_error, 1000)::int
+--		and not l_error_sign 
+--	then 
+--    	
+--        call process_info.pr_helper_log(l_procedure, 'Превышен лимит ошибок (' || coalesce(l_process_data.max_error, 1000) || ') в регламентном процессе! Выход.', l_proc_id::text); 
+--        
+--		call process_manage.write_error(
+--			 l_proc_id --Yefremov p_process_log_id 	-- ИД процесса
+--			,'Накопилось много ошибок!!! Запустите процесс "' || l_process || '" в режиме обработки ошибок!'
+--			,'Накопилось много ошибок (' || l_err_cnt || ')!!! В таблице fors_pg.process_info.process_state для процесса "' || l_process || '" максимальное кол-во ошибок ' || l_process_data.max_error || '!'
+--			,'Ошибки данных'
+--		);
+--			   
+--        case
+--		when p_process_log_id is null
+--		then call process_manage.finish_process(l_proc_id, null);
+--		else null;
+--		end case;
+--	
+--       	return;
+--
+--	else null;
+--    end case;
 
 	l_cnt_flow := coalesce(p_cnt_flow,1::int2);
 	l_num_flow := coalesce(p_num_flow,1::int2);
@@ -144,11 +144,11 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 		or  l_num_flow > l_cnt_flow
 	then
 		
-		call process_info.pr_helper_log(l_procedure, 'Неверное значение количества потоков\текущий поток [' || l_cnt_flow::text || '''' || l_num_flow || ']! Выход.', l_proc_id::text); 
+		call process_info.pr_helper_log(l_procedure, 'Неверное значение количества потоков\текущий поток [' || l_cnt_flow::text || '\' || l_num_flow || ']! Выход.', l_proc_id::text); 
         
 		call process_manage.write_error(
 			 l_proc_id --Yefremov p_process_log_id 	-- ИД процесса
-			,'Неверное значение количества потоков\текущий поток [' || l_cnt_flow::text || '\\' || l_num_flow || ']!'
+			,'Неверное значение количества потоков\текущий поток [' || l_cnt_flow::text || '\' || l_num_flow || ']!'
 			,null
 			,'Ошибки'
 		);
@@ -257,8 +257,8 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 				from (
 					select wi.object_id
 					from arch_ext.idw_sy_workflow_info wi
-					inner join arch_ext.idw_arj_interfax_pdl a on ---------- TODO адоптация 
-						wi.object_id = a.id::text
+					inner join arch_ext.idwh2_arj_contract_gov a on 
+						wi.object_id = a.id_contract::text || '.' || a.load_id::text
 					where 
 							wi.workflow_id = l_process_data.workflow_id
 						and wi.state_id = l_process_data.state_id
@@ -289,8 +289,8 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 				from (
 					select wi.object_id
 					from process_info.idw_sy_workflow_info wi
-					inner join arch_ext.idw_arj_interfax_pdl_buffer a on 
-						wi.object_id = a.id::text
+					inner join arch_ext.idwh2_arj_contract_gov_buffer a on 
+						wi.object_id = a.id_contract::text || '.' || a.load_id::text
 					where 
 							wi.workflow_id = l_process_data.workflow_id
 						and wi.state_id = l_process_data.state_id
@@ -330,12 +330,12 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 
 				begin
 
-					call eor.pr_eor_pdl_load_buffer(
+					call eor.pr_eor_ba_contract_ins_load_buffer(
 						 p_ids => l_array_id
 						,p_process_log_id => l_proc_id
 					);
 				
-					call eor.pr_eor_pdl_load_batch(
+					call eor.pr_eor_ba_contract_ins_load_batch(
 						 p_ids => l_array_id
 						,p_process_data => l_process_data
 						,p_process_log_id => l_proc_id

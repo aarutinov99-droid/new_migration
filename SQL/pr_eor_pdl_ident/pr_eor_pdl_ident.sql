@@ -1,6 +1,6 @@
 -- DROP PROCEDURE eor.pr_eor_ba_contract_ins_load(int8, int2, int2);
 
-CREATE OR REPLACE PROCEDURE eor.pr_eor_pdl_load(IN p_process_log_id bigint, IN p_cnt_flow smallint DEFAULT NULL::smallint, IN p_num_flow smallint DEFAULT NULL::smallint)
+CREATE OR REPLACE PROCEDURE eor.pr_eor_pdl_ident(IN p_process_log_id bigint, IN p_cnt_flow smallint DEFAULT NULL::smallint, IN p_num_flow smallint DEFAULT NULL::smallint)
  LANGUAGE plpgsql
  SECURITY DEFINER
 AS $procedure$ 
@@ -10,8 +10,8 @@ declare
 
 	-- использовать параметры p_cnt_flow, p_null_flow по default!!!
  
-	l_process process_info.process_state.process_alias%type := 'PR_EOR_PDL_LOAD';
-	l_procedure text := 'eor.pr_eor_pdl_load';
+	l_process process_info.process_state.process_alias%type := 'PR_EOR_PDL_IDENT';
+	l_procedure text := 'eor.pr_eor_pdl_ident';
 
   	l_process_data process_info.process_state%rowtype;
 	l_batch_size int;
@@ -144,7 +144,7 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 		or  l_num_flow > l_cnt_flow
 	then
 		
-		call process_info.pr_helper_log(l_procedure, 'Неверное значение количества потоков\текущий поток [' || l_cnt_flow::text || '''' || l_num_flow || ']! Выход.', l_proc_id::text); 
+		call process_info.pr_helper_log(l_procedure, 'Неверное значение количества потоков\текущий поток [' || l_cnt_flow::text || '\'' || l_num_flow || ']! Выход.', l_proc_id::text); 
         
 		call process_manage.write_error(
 			 l_proc_id --Yefremov p_process_log_id 	-- ИД процесса
@@ -256,8 +256,8 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 					,l_cnt
 				from (
 					select wi.object_id
-					from arch_ext.idw_sy_workflow_info wi
-					inner join arch_ext.idw_arj_interfax_pdl a on ---------- TODO адоптация 
+					from process_info.idw_sy_workflow_info wi
+					inner join arch_ext.idw_arj_interfax_pdl_load_buffer a on ---------- TODO переделать через оперную таблицу 
 						wi.object_id = a.id::text
 					where 
 							wi.workflow_id = l_process_data.workflow_id
@@ -289,7 +289,7 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 				from (
 					select wi.object_id
 					from process_info.idw_sy_workflow_info wi
-					inner join arch_ext.idw_arj_interfax_pdl_buffer a on 
+					inner join arch_ext.idw_arj_interfax_pdl_load_buffer a on 
 						wi.object_id = a.id::text
 					where 
 							wi.workflow_id = l_process_data.workflow_id
@@ -329,18 +329,18 @@ raise notice 'l_proc_id:%',l_proc_id::text;
 			begin
 
 				begin
-
-					call eor.pr_eor_pdl_load_buffer(
+					/*
+					call eor.pr_eor_pdl_ident_load_buffer(
 						 p_ids => l_array_id
 						,p_process_log_id => l_proc_id
 					);
 				
-					call eor.pr_eor_pdl_load_batch(
+					call eor.pr_eor_pdl_ident_batch(
 						 p_ids => l_array_id
 						,p_process_data => l_process_data
 						,p_process_log_id => l_proc_id
 					);
-	
+					*/
 				exception
 				when others
 				then 
@@ -449,3 +449,124 @@ $procedure$
 
 ALTER PROCEDURE eor.pr_eor_ba_contract_ins_load(int8, int2, int2) OWNER TO r_fors_db_owner;
 GRANT ALL ON PROCEDURE eor.pr_eor_ba_contract_ins_load(int8, int2, int2) TO r_fors_db_owner;
+
+
+-- =============================================================================
+-- ОСНОВНАЯ ПРОЦЕДУРА
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE IDWH2.pr_eor_pdl_ident (
+    p_id_process_log INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    l_process                  TEXT := 'PR_EOR_PDL_IDENT';
+    l_procedure                TEXT := 'pr_eor_pdl_ident';
+    l_sr_type_id               INTEGER := 145;
+    l_source_id                INTEGER := 2070;
+
+    l_process_data             RECORD;
+    l_batch_size               INTEGER;
+    l_cnt                      INTEGER := 0;
+    l_err_cnt                  INTEGER := 0;
+    l_error_sign               CHAR(1) := '0';
+    l_start_date               TIMESTAMP;
+    l_end_date                 TIMESTAMP;
+    l_batch_result             RECORD;
+BEGIN
+    -- Чтение настроек процесса
+    SELECT * INTO l_process_data
+      FROM idw_rco_process_state
+     WHERE process_alias = l_process;
+
+    l_batch_size := l_process_data.batch_size;
+
+    RAISE NOTICE 'start of %', l_process;
+
+    -- Проверка количества ошибок
+    SELECT COUNT(1) INTO l_err_cnt
+      FROM idw_sy_workflow_error
+     WHERE workflow_id = l_process_data.workflow_id
+       AND state_id = l_process_data.state_id;
+
+    IF l_err_cnt >= l_process_data.max_error
+       AND pkg_rco_process.can_run(l_process) <> 2 THEN
+        PERFORM idwh2.pkg_log.write_error(
+            p_id_process_log,
+            'Накопилось много ошибок!!! Запустите процесс "' || l_process || '" в режиме обработки ошибок!',
+            'Накопилось много ошибок (' || l_err_cnt || ')!!! В таблице IDWH2.IDW_RCO_PROCESS_STATE для процесса "' || l_process || '" максимальное кол-во ошибок ' || l_process_data.max_error || '!',
+            'Ошибки данных'
+        );
+        RAISE NOTICE '% too many errors! exiting', l_process;
+        RETURN;
+    END IF;
+
+    <<next_portion>>
+    LOOP
+        -- Проверка, не помечен ли процесс на остановку
+        IF NOT pkg_rco_process.can_run(l_process) IN (1, 2) THEN
+            RAISE NOTICE '% marked to stop by user! exiting', l_process;
+            RETURN;
+        END IF;
+
+        IF pkg_rco_process.can_run(l_process) = 2 THEN
+            l_error_sign := '1';
+            l_batch_size := 1;
+            RAISE NOTICE '% error processing mode', l_process;
+        ELSE
+            l_error_sign := '0';
+            l_batch_size := l_process_data.batch_size;
+            RAISE NOTICE '% normal processing mode', l_process;
+        END IF;
+
+        -- Обработка пакета
+        l_batch_result := IDWH2.process_batch_pdl_ident(
+            l_process_data,
+            l_batch_size,
+            l_error_sign
+        );
+
+        l_cnt := l_batch_result.cnt;
+        l_err_cnt := l_batch_result.err_cnt;
+        l_start_date := l_batch_result.start_date;
+        l_end_date := l_batch_result.end_date;
+
+        -- Логирование
+        PERFORM idwh2.process_info_log_wm(
+            p_id_process_log,
+            l_start_date,
+            l_end_date,
+            l_error_sign,
+            l_batch_size,
+            l_cnt,
+            l_err_cnt,
+            ''
+        );
+
+        -- Ничего не обработали - выходим
+        IF l_cnt = 0 THEN
+            RAISE NOTICE '% no more items! exiting', l_process;
+            RETURN;
+        END IF;
+
+        -- Проверка количества ошибок
+        SELECT COUNT(1) INTO l_err_cnt
+          FROM idw_sy_workflow_error
+         WHERE workflow_id = l_process_data.workflow_id
+           AND state_id = l_process_data.state_id;
+
+        IF l_err_cnt >= l_process_data.max_error THEN
+            PERFORM idwh2.pkg_log.write_error(
+                p_id_process_log,
+                'Накопилось много ошибок!!! Запустите процесс "' || l_process || '" в режиме обработки ошибок!',
+                'Накопилось много ошибок (' || l_err_cnt || ')!!! В таблице IDWH2.IDW_RCO_PROCESS_STATE для процесса "' || l_process || '" максимальное кол-во ошибок ' || l_process_data.max_error || '!',
+                'Ошибки данных'
+            );
+            RAISE NOTICE '% too many errors! exiting', l_process;
+            RETURN;
+        END IF;
+
+    END LOOP next_portion;
+
+END;
+$$;

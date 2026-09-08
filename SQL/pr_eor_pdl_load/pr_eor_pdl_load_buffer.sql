@@ -5,6 +5,9 @@ CREATE OR REPLACE PROCEDURE eor.pr_eor_pdl_load_buffer(IN p_ids text[], IN p_pro
  SECURITY DEFINER
 AS $procedure$ 
 declare
+	/* Буферизация данных для регламетных процессов :
+		- EOR_PDL_LOAD_PG
+	*/
 	c_workflow_id constant process_info.idw_sy_workflow_info.workflow_id%type := 104;
 	c_state_id constant process_info.idw_sy_workflow_info.state_id%type := 1041;
 	l_ids text[];
@@ -57,6 +60,11 @@ begin
 	end if;
 
 	-- 1. Буферизация основной таблицы
+    PERFORM 1 FROM information_schema.tables 
+    WHERE table_schema = 'arch_ext' AND table_name = 'idw_arj_interfax_pdl';
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Основная таблица arch_ext.idw_arj_interfax_pdl не существует';
+    END IF;	
     RAISE NOTICE 'Начало буферизации основной таблицы idw_arj_interfax_pdl...';
     -- Копирование данных из исходной таблицы в буферную
     INSERT INTO arch_ext.idw_arj_interfax_pdl_buffer (
@@ -165,7 +173,32 @@ begin
 	RAISE NOTICE 'Буферизация основной таблицы завершена. Скопировано % записей.', rows_count;
 	
 	-- Буферизация дочерних таблиц
-    RAISE NOTICE 'Начало буферизации дочерних таблиц...';
+	-- Проверка буферных таблиц
+    SELECT array_agg(table_name) INTO v_missing_tables
+		FROM (
+			SELECT unnest(ARRAY[
+				'idw_arj_interfax_pdl_buffer',
+				'idw_arj_pdl_categories_buffer',
+				'idw_arj_pdl_category407_buffer',
+				'idw_arj_pdl_countries_buffer',
+				'idw_arj_pdl_jobs_buffer',
+				'idw_arj_pdl_names_buffer',
+				'idw_arj_pdl_sanctions_buffer',
+				'idw_arj_pdl_sanlists_buffer',
+				'idw_arj_pdl_translit_names_buffer',
+				'idw_arj_interfax_pdl_load_buffer'
+			]) AS table_name
+		) t
+		WHERE NOT EXISTS (
+			SELECT 1 FROM information_schema.tables 
+			WHERE table_schema = 'arch_ext' AND table_name = t.table_name
+		);
+		
+	IF array_length(v_missing_tables, 1) > 0 THEN
+		RAISE EXCEPTION 'Отсутствуют буферные таблицы: %', 
+			array_to_string(v_missing_tables, ', ');
+	END IF;	
+	RAISE NOTICE 'Начало буферизации дочерних таблиц...';
     
     --  Буферизация категорий
     RAISE NOTICE '  Буферизация idw_arj_pdl_categories...';
