@@ -5,8 +5,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $procedure$ 
 DECLARE
-    c_workflow_id CONSTANT process_info.idw_sy_workflow_info.workflow_id%type := 255;
-    c_state_id CONSTANT process_info.idw_sy_workflow_info.state_id%type := 2551;
+    c_workflow_id CONSTANT process_info.idw_sy_workflow_info.workflow_id%type := 225;
+    c_state_id CONSTANT process_info.idw_sy_workflow_info.state_id%type := 2251;
     l_cnt int4;
     l_system_id arch_ext.idw_arj_interfax_pdl_buffer.system_id%type;
     l_load_id arch_ext.idw_arj_interfax_pdl_buffer.load_id%type;

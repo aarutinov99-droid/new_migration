@@ -8,8 +8,8 @@ declare
 	/* Буферизация данных для регламетных процессов :
 		- EOR_PDL_LOAD_PG
 	*/
-	c_workflow_id constant process_info.idw_sy_workflow_info.workflow_id%type := 104;
-	c_state_id constant process_info.idw_sy_workflow_info.state_id%type := 1041;
+	c_workflow_id constant process_info.idw_sy_workflow_info.workflow_id%type := 225;
+	c_state_id constant process_info.idw_sy_workflow_info.state_id%type := 2251;
 	l_ids text[];
 	c_procedure constant text := 'fors_pg.eor.pr_eor_pdl_load_buffer';
 	rows_count bigint;

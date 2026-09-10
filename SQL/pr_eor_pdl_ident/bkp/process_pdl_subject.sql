@@ -260,3 +260,14 @@ EXCEPTION
         RETURN l_result;
 END;
 $$;
+
+ALTER PROCEDURE eor.pr_eor_pdl_ident_process_pdl_subject(
+    p_sr_subject_id    INTEGER,
+    p_full_name        TEXT,
+    p_birth_date       DATE,
+    p_system_id        TEXT,
+    p_countries        TEXT,
+    p_rid              TEXT,
+    p_update_date      TIMESTAMP,
+    p_process_data     RECORD
+)  OWNER TO r_fors_db_owner;

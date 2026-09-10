@@ -15,8 +15,8 @@ DECLARE
 	-- =========================================================================
 	-- КОНСТАНТЫ
 	-- =========================================================================
-	c_workflow_id CONSTANT process_info.idw_sy_workflow_info.workflow_id%type := 255;  -- ИД рабочего процесса
-    c_state_id CONSTANT process_info.idw_sy_workflow_info.state_id%type := 2551;        -- ИД состояния
+	c_workflow_id CONSTANT process_info.idw_sy_workflow_info.workflow_id%type := 225;  -- ИД рабочего процесса
+    c_state_id CONSTANT process_info.idw_sy_workflow_info.state_id%type := 2251;        -- ИД состояния
 	c_procedure constant text := 'fors_pg.eor.pr_eor_pdl_load_batch';                    -- Имя процедуры для логирования
     l_process CONSTANT text := 'PR_EOR_PDL_LOAD_PG';                                    -- Имя процесса
     l_sr_type_id CONSTANT bigint := 145;                                                -- Тип субъекта в спецреестре
@@ -42,6 +42,7 @@ begin
 	-- Инициализация счетчиков
     l_cnt := 0;
     l_err_cnt := 0;
+	RAISE NOTICE 'Стартуем процесс обработки батча';
 
 	-- Логируем запуск загрузки ПДЛ
 	call pkg_eor_contract_load.log_level_2(
@@ -342,6 +343,42 @@ begin
 			-- =====================================================================
 			-- ПРОДВИГАЕМ ЗАПИСЬ ПО ОЧЕРЕДИ ОБРАБОТКИ
 			-- =====================================================================
+			-- Добавление задания в очередь
+			WITH moved_queue AS (
+				SELECT 
+					workflow_id,
+					object_id,
+					(
+						SELECT state_next.id
+						FROM process_info.idw_sr_workflow_state state_current
+						INNER JOIN process_info.idw_sr_workflow_state state_next 
+							ON state_next.workflow_id = state_current.workflow_id
+							AND state_next.order_by = state_current.order_by + 1
+						WHERE state_current.workflow_id = aif.workflow_id
+						  AND state_current.id = aif.state_id
+					) AS state_id,
+					'0'::character(1) AS error_sign,
+					priority,
+					clock_timestamp() AS create_date,
+					clock_timestamp() AS state_date
+				FROM arch_ext.idw_sy_workflow_info aif
+				where workflow_id = c_workflow_id
+				and state_id = c_state_id
+				and object_id = l_id::text		
+			)
+			INSERT INTO process_info.idw_sy_workflow_info (
+				workflow_id, state_id, object_id, error_sign, priority, create_date, state_date
+			)
+			SELECT 
+				workflow_id, state_id, object_id, error_sign, priority, create_date, state_date
+			FROM moved_queue
+			WHERE state_id IS NOT NULL;			
+			-- Удаление записи из очереди архивного слоя
+			
+			DELETE FROM arch_ext.idw_sy_workflow_info
+			where workflow_id = c_workflow_id  and state_id = c_state_id
+  		    and object_id = l_id::text;			
+			/*
 			update process_info.idw_sy_workflow_info set
 				object_id = l_id::text,
 				state_id = (
@@ -359,7 +396,7 @@ begin
 			where workflow_id = c_workflow_id
 			  and state_id = c_state_id
 			  and object_id = l_id::text;			
-			
+			*/
 			-- Логируем успешное завершение обработки записи
 			CALL eor.rco_helper__log(c_procedure || 'выполнено system_id = ' || c.system_id || '  l_id = '|| l_id || ' l_sr_subject_id = ' || l_sr_subject_id, c_procedure);
 		   
