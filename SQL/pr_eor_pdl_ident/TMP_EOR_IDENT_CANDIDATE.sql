@@ -16,3 +16,9 @@ COMMENT ON COLUMN eor.TMP_EOR_IDENT_CANDIDATE.FIND_CANDIDATE_ID IS 'Иденти
 COMMENT ON COLUMN eor.TMP_EOR_IDENT_CANDIDATE.ETALON_REGISTRY_ID IS 'Идентификатор эталонного реестра';
 COMMENT ON COLUMN eor.TMP_EOR_IDENT_CANDIDATE.EOR_H_ID IS 'Идентификатор EOR ';
 COMMENT ON COLUMN eor.TMP_EOR_IDENT_CANDIDATE.WEIGHT IS 'Вес или степень соответствия кандидата (коэффициент)';
+
+ALTER TABLE IF EXISTS eor.tmp_eor_ident_candidate
+    ADD CONSTRAINT tmp_eor_ident_candidate_pk PRIMARY KEY (etalon_registry_id, find_candidate_id);
+
+COMMENT ON CONSTRAINT tmp_eor_ident_candidate_pk ON eor.tmp_eor_ident_candidate
+    IS 'Уникальный ключ';

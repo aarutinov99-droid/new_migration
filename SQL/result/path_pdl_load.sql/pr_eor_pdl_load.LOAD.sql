@@ -1,3 +1,4 @@
+
 -- host 10.10.12.11
 -- database fors_pg
 -- shema eor
@@ -19,6 +20,47 @@
 		-- Применены измененя к опер слою (fors_pg)
 		--( fors_change_full.sql)
 ------------------------------------------------
+	-- 1.1 Формирование тестовых данных
+		
+		INSERT INTO sr.sr_subject (
+			sr_subject_id,
+			etalon_registry_id,
+			eor_subject_mention_id,
+			incl_first_date,
+			incl_date,
+			incl_reason,
+			excl_date,
+			excl_reason,
+			deleted_sign,
+			sr_type_id,
+			actual_sign,
+			checked_sign,
+			sr_event_id,
+			reg_num_ext_reestr
+		)
+		SELECT
+			p.sr_subject_id,
+			NULL::bigint                                   AS etalon_registry_id,
+			NULL::bigint                                   AS eor_subject_mention_id,
+			COALESCE(p.update_date, now())::timestamp      AS incl_first_date,
+			COALESCE(p.update_date, now())::timestamp      AS incl_date,
+			p.sanctions                                    AS incl_reason,
+			NULL::timestamp                                AS excl_date,
+			NULL::text                                     AS excl_reason,
+			'0'::character(1)                              AS deleted_sign,
+			145                                            AS sr_type_id,
+			'1'::character(1)                              AS actual_sign,
+			'1'::character(1)                              AS checked_sign,
+			NULL::bigint                                   AS sr_event_id,
+			NULL::text                                     AS reg_num_ext_reestr
+		--select * 
+		FROM sr.sr_subject_pdl p
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM sr.sr_subject s
+			WHERE s.sr_subject_id = p.sr_subject_id
+		);
+		
 	-- 1.4. создание опорной таблицы расчета
 	create table if not exists eor.test_eor_subject_id(
 		id bigint, 
@@ -314,7 +356,11 @@ SELECT
 	USING eor.test_eor_subject_id t
 	WHERE x.id = t.id;
 
--- 10. Очистка опорной таблицы буфера
+-- srr.sr_subject
+	delete from sr.sr_subject x
+	where sr_subject_id in (select sr_subject_id from arch_ext.idw_arj_interfax_pdl_load_buffer  );
+		
+-- 11. Очистка опорной таблицы буфера
 	delete from arch_ext.idw_arj_interfax_pdl_load_buffer;
 
 -- 11 удаление опорных объектов показа
@@ -322,5 +368,4 @@ SELECT
 	drop  table if exists eor.test_eor_subject_process;
 	
 -- Необходимо выполнить очистку тестовых данных архивного слоя
-	-- Выполнение скрипта (test/archi_pr_eor_pdl_load_data_test.sql )(test/archi_pr_eor_pdl_clear_data_test.sql )
-
+	-- Выполнение скрипта (test/archi_pr_eor_pdl_clear_data_test.sql )
