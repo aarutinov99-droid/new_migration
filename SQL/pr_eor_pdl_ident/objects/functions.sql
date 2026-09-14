@@ -1,13 +1,8 @@
--- =============================================================================
--- ПРОЦЕДУРА ОБРАБОТКИ ПАКЕТА (бывшая встроенная процедура process_batch)
--- =============================================================================
-CREATE OR REPLACE PROCEDURE eor.pr_pdl_ident_batch(
-	IN p_ids text[],
-	IN p_process_data process_info.process_state,
-	IN p_process_log_id bigint
-)
-LANGUAGE plpgsql
-AS $$
+-- DROP PROCEDURE eor.pr_pdl_ident_batch(_text, process_info.process_state, int8);
+
+CREATE OR REPLACE PROCEDURE eor.pr_pdl_ident_batch(IN p_ids text[], IN p_process_data process_info.process_state, IN p_process_log_id bigint)
+ LANGUAGE plpgsql
+AS $procedure$
 DECLARE
 	-- =========================================================================
 	-- КОНСТАНТЫ
@@ -52,11 +47,11 @@ BEGIN
                p.sr_subject_id,
                p.system_id,
                p.countries,
-               bf.id AS rid,
+               p.sr_subject_id AS rid,
                p.update_date
           FROM sr.sr_subject_pdl p
 		  join (select * from arch_ext.idw_arj_interfax_pdl_load_buffer where id = ANY(p_ids::bigint[])) bf on bf.sr_subject_id = p.sr_subject_id -- Ограничение батча
-          LEFT JOIN sr.sr_subject s ON s.sr_subject_id = p.sr_subject_id
+          LEFT JOIN eor.sr_subject s ON s.sr_subject_id = p.sr_subject_id
          WHERE p.is_eor_ident_process = 0
            AND s.etalon_registry_id IS NULL
     ) LOOP
@@ -75,13 +70,13 @@ BEGIN
 			
             -- Проверка наличия в спецреестре
             SELECT COUNT(1) INTO l_sr_subject_count
-              FROM sr.sr_subject s
+              FROM eor.sr_subject s
              WHERE s.sr_subject_id = c.sr_subject_id
                AND s.sr_type_id = c_sr_type_id;
 
             IF l_sr_subject_count > 0 THEN
                 SELECT s.sr_subject_id INTO l_sr_subject_id
-                  FROM sr.sr_subject s
+                  FROM eor.sr_subject s
                  WHERE s.sr_subject_id = c.sr_subject_id
                    AND s.sr_type_id = c_sr_type_id;
             END IF;
@@ -279,7 +274,7 @@ BEGIN
             -- ИДЕНТИФИЦИРОВАН
             -- =====================================================================
             IF l_etalon_registry_id IS NOT NULL AND l_sr_subject_id > 0 THEN
-				--RAISE NOTICE '1';
+			
                 l_sr_event_id := sr.sr_common_pkg__sr_event_add(
 							101,
 							c_sr_type_id,
@@ -288,19 +283,18 @@ BEGIN
 							NULL,
 							'0',
 							CURRENT_USER);
-				--RAISE NOTICE '2';
+
                 PERFORM sr.sr_common_pkg__sr_subject_save_h(c.sr_subject_id);
-                UPDATE sr.sr_subject s
+                UPDATE eor.sr_subject s
                    SET etalon_registry_id = l_etalon_registry_id,
                        sr_event_id = l_sr_event_id
                  WHERE s.sr_subject_id = c.sr_subject_id
                    AND s.sr_type_id = c_sr_type_id;
 
             ELSIF l_etalon_registry_id IS NOT NULL AND l_sr_subject_id IS NULL THEN
-				--RAISE NOTICE '3';
                 l_sr_event_id := sr.sr_common_pkg__sr_event_add(100, c_sr_type_id, c.sr_subject_id, l_etalon_registry_id::bigint, NULL, '0', CURRENT_USER);
-				--RAISE NOTICE '4';
-                INSERT INTO sr.sr_subject (
+
+                INSERT INTO eor.sr_subject (
                     sr_subject_id,
                     etalon_registry_id,
                     incl_first_date,
@@ -330,10 +324,9 @@ BEGIN
             -- =====================================================================
             -- СОЗДАЕМ УПОМИНАНИЕ
             -- =====================================================================
-            --RAISE NOTICE 'СОЗДАЕМ УПОМИНАНИЕ';
+            
             IF l_etalon_registry_id IS NULL THEN
                 BEGIN
-				  	--RAISE NOTICE '10';
                     SELECT t.eor_subject_mention_id INTO l_eor_subject_mention_id
                       FROM eor.idw_mr_subject_mention t
                      WHERE source_id = c_source_id
@@ -342,9 +335,8 @@ BEGIN
                     WHEN NO_DATA_FOUND THEN
                         NULL;
                 END;
-				--RAISE NOTICE '11';
+
                 IF l_is_rfl = 1 AND l_eor_subject_mention_id IS NULL THEN
-					--RAISE NOTICE '11.1';
                     l_rfl_attr.full_name := c.full_name;
                     l_rfl_attr.birth_date := c.date_birthday;
                     l_eor_subject_mention_id := pkg_eor_api.add_subj_rfl_mention(
@@ -357,9 +349,7 @@ BEGIN
                         10::smallint,
                         0::smallint
                     );
-					--RAISE NOTICE '11.2';
 				ELSIF l_is_rfl = 0 AND l_eor_subject_mention_id IS NULL THEN
-					--RAISE NOTICE '12';
                     l_ifl_attr.full_name := c.full_name;
                     l_ifl_attr.birth_date := c.date_birthday;
                     l_eor_subject_mention_id := pkg_eor_api.add_subj_ifl_mention(
@@ -390,14 +380,11 @@ BEGIN
                     );
 				END IF;
 				*/
-				--raise notice 'l_sr_subject_id IS % AND l_eor_subject_mention_id IS NOT %',l_sr_subject_id , l_eor_subject_mention_id;
+
                 IF l_sr_subject_id IS NULL AND l_eor_subject_mention_id IS NOT NULL THEN
-					--RAISE NOTICE '13';
                     l_sr_event_id := sr.sr_common_pkg__sr_event_add(100, c_sr_type_id, c.sr_subject_id, l_etalon_registry_id, NULL, '0', CURRENT_USER);
-					--RAISE NOTICE '13.1 ';
-                    
-					--raise notice 'Вставка в спецреестр %' ,l_sr_event_id;
-                    INSERT INTO sr.sr_subject (
+
+                    INSERT INTO eor.sr_subject (
                         sr_subject_id,
                         eor_subject_mention_id,
                         incl_first_date,
@@ -423,10 +410,7 @@ BEGIN
                         l_sr_event_id
                     );
                 ELSIF l_eor_subject_mention_id IS NOT NULL THEN
-					--RAISE NOTICE '14  %- %' ,c.sr_subject_id,l_sr_event_id;
-                    
                     PERFORM sr.sr_common_pkg__sr_subject_save_h(c.sr_subject_id);
-					--RAISE NOTICE '14.1';
                     l_sr_event_id := sr.sr_common_pkg__sr_event_add(
 							p_sr_event_type_id=>101,
 							p_sr_type_id=>c_sr_type_id, 
@@ -435,9 +419,8 @@ BEGIN
 							p_description=>NULL,
 							p_manual_sign=>'0',
 							p_sr_event_user_os=>CURRENT_USER);
-					--RAISE NOTICE '14.1';
-                    	
-                    UPDATE sr.sr_subject s
+							
+                    UPDATE eor.sr_subject s
                        SET eor_subject_mention_id = l_eor_subject_mention_id,
                            sr_event_id = l_sr_event_id,
                            deleted_sign = '0',
@@ -450,20 +433,11 @@ BEGIN
                 END IF;
             END IF;
 
-            -- Удаление очереди
-			/*
-			RAISE NOTICE ' Удалить очередь
-			WHERE workflow_id = %
-               AND state_id = %
-               AND object_id = %
-			',              p_process_data.workflow_id,
-               p_process_data.state_id,
-               c.rid;
-			*/
+            -- Удаление ошибок
             DELETE FROM process_info.idw_sy_workflow_info
              WHERE workflow_id = p_process_data.workflow_id
                AND state_id = p_process_data.state_id
-               AND object_id = c.rid::text;
+               AND object_id = l_id;
 
             l_cnt := l_cnt + 1;
 
@@ -475,7 +449,6 @@ BEGIN
 
         EXCEPTION
             WHEN OTHERS THEN
-				RAISE NOTICE 'ERROR %',SQLERRM;
                 call process_info.save_error(
                     l_id,
                     p_process_data.workflow_id,
@@ -489,8 +462,6 @@ BEGIN
         END;
     END LOOP;
 
-    --RAISE NOTICE '-------------------------';
-
     --COMMIT;
     --p_end_date := clock_timestamp();
 
@@ -499,11 +470,330 @@ EXCEPTION
         --p_end_date := clock_timestamp();
         RAISE;
 END;
-$$;
-
-ALTER PROCEDURE eor.pr_pdl_ident_batch(text[], process_info.process_state, bigint)
-    OWNER TO r_fors_db_owner;
+$procedure$
+;
 
 
+-- DROP FUNCTION sr.sr_common_pkg__sr_event_add(int4, int4, int8, int8, text, bpchar, text, int8);
 
-SELECT *  FROM plpgsql_check_function('eor.pr_pdl_ident_batch(text[], process_info.process_state, bigint)');
+CREATE OR REPLACE FUNCTION sr.sr_common_pkg__sr_event_add(p_sr_event_type_id integer, p_sr_type_id integer, p_sr_subject_id bigint, p_object_id bigint, p_description text, p_manual_sign character, p_sr_event_user_os text, p_sr_event_id bigint DEFAULT NULL::bigint)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+-- Добавление события (Возвращает SR_EVENT_ID)
+declare
+    l_TIME 			timestamp := now();
+    l_SR_EVENT_ID	Int8;
+begin
+	l_SR_EVENT_ID := coalesce(P_SR_EVENT_ID, NEXTVAL('sr.sr_event_seq'));
+
+	--call eor.print_debug_msg(format('l_SR_EVENT_ID=%s; P_SR_EVENT_TYPE_ID=%s; P_SR_SUBJECT_ID=%s; P_DESCRIPTION=%s; P_MANUAL_SIGN=%s; P_SR_TYPE_ID=%s; P_OBJECT_ID=%s; SR_EVENT_DATE=%s; P_SR_EVENT_USER_OS=%s', l_SR_EVENT_ID, P_SR_EVENT_TYPE_ID, P_SR_SUBJECT_ID, P_DESCRIPTION, P_MANUAL_SIGN, P_SR_TYPE_ID, P_OBJECT_ID, SR_EVENT_DATE ), 2::int)
+	
+    insert into sr.SR_EVENT (SR_EVENT_ID, SR_EVENT_TYPE_ID, SR_SUBJECT_ID, DESCRIPTION, MANUAL_SIGN, SR_TYPE_ID, OBJECT_ID, SR_EVENT_DATE, SR_EVENT_USER_OS)
+    values (l_SR_EVENT_ID::int8, P_SR_EVENT_TYPE_ID, P_SR_SUBJECT_ID, P_DESCRIPTION, P_MANUAL_SIGN, P_SR_TYPE_ID, P_OBJECT_ID, l_TIME, P_SR_EVENT_USER_OS );
+
+    return l_SR_EVENT_ID;
+exception
+    when others then 
+       	declare
+    		v_err_code text; -- SQLSTATE - код ошибки
+    		v_msg_text text; -- SQLERRM - текст ошибки
+    		v_context  text; -- стек вызовов
+    		v_detail   text;
+    		v_hint     text;
+    	
+    		l_err		text;
+   		begin
+     		GET STACKED DIAGNOSTICS
+    	 		v_err_code = RETURNED_SQLSTATE,    -- SQLSTATE - код ошибки
+		  		v_msg_text = MESSAGE_TEXT,         -- SQLERRM - текст ошибки
+    	  		v_context  = PG_EXCEPTION_CONTEXT, -- стек вызовов
+    	  		v_detail   = PG_EXCEPTION_DETAIL,
+          		v_hint     = PG_EXCEPTION_HINT; 
+       	
+      	
+		    	l_err := concat_ws( ', '
+    	 			,'state: ' 	|| v_err_code
+    	 			,'msg:'		|| v_msg_text
+    	 			,'detail:' 	|| v_detail
+					--,'hint:' 	|| v_hint
+					--,'context:' || v_context
+    	 		);    
+    	 	raise exception '%', l_err;
+        --return -1;
+       end; 
+end;
+$function$
+;
+
+
+
+
+
+-- DROP FUNCTION sr.sr_common_pkg__sr_event_add(int4, int4, int8, int8, text, bpchar, text, int8);
+
+CREATE OR REPLACE FUNCTION sr.sr_common_pkg__sr_event_add(p_sr_event_type_id integer, p_sr_type_id integer, p_sr_subject_id bigint, p_object_id bigint, p_description text, p_manual_sign character, p_sr_event_user_os text, p_sr_event_id bigint DEFAULT NULL::bigint)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+-- Добавление события (Возвращает SR_EVENT_ID)
+declare
+    l_TIME 			timestamp := now();
+    l_SR_EVENT_ID	Int8;
+begin
+	l_SR_EVENT_ID := coalesce(P_SR_EVENT_ID, NEXTVAL('sr.sr_event_seq'));
+
+	--call eor.print_debug_msg(format('l_SR_EVENT_ID=%s; P_SR_EVENT_TYPE_ID=%s; P_SR_SUBJECT_ID=%s; P_DESCRIPTION=%s; P_MANUAL_SIGN=%s; P_SR_TYPE_ID=%s; P_OBJECT_ID=%s; SR_EVENT_DATE=%s; P_SR_EVENT_USER_OS=%s', l_SR_EVENT_ID, P_SR_EVENT_TYPE_ID, P_SR_SUBJECT_ID, P_DESCRIPTION, P_MANUAL_SIGN, P_SR_TYPE_ID, P_OBJECT_ID, SR_EVENT_DATE ), 2::int)
+	
+    insert into sr.SR_EVENT (SR_EVENT_ID, SR_EVENT_TYPE_ID, SR_SUBJECT_ID, DESCRIPTION, MANUAL_SIGN, SR_TYPE_ID, OBJECT_ID, SR_EVENT_DATE, SR_EVENT_USER_OS)
+    values (l_SR_EVENT_ID::int8, P_SR_EVENT_TYPE_ID, P_SR_SUBJECT_ID, P_DESCRIPTION, P_MANUAL_SIGN, P_SR_TYPE_ID, P_OBJECT_ID, l_TIME, P_SR_EVENT_USER_OS );
+
+    return l_SR_EVENT_ID;
+exception
+    when others then 
+       	declare
+    		v_err_code text; -- SQLSTATE - код ошибки
+    		v_msg_text text; -- SQLERRM - текст ошибки
+    		v_context  text; -- стек вызовов
+    		v_detail   text;
+    		v_hint     text;
+    	
+    		l_err		text;
+   		begin
+     		GET STACKED DIAGNOSTICS
+    	 		v_err_code = RETURNED_SQLSTATE,    -- SQLSTATE - код ошибки
+		  		v_msg_text = MESSAGE_TEXT,         -- SQLERRM - текст ошибки
+    	  		v_context  = PG_EXCEPTION_CONTEXT, -- стек вызовов
+    	  		v_detail   = PG_EXCEPTION_DETAIL,
+          		v_hint     = PG_EXCEPTION_HINT; 
+       	
+      	
+		    	l_err := concat_ws( ', '
+    	 			,'state: ' 	|| v_err_code
+    	 			,'msg:'		|| v_msg_text
+    	 			,'detail:' 	|| v_detail
+					--,'hint:' 	|| v_hint
+					--,'context:' || v_context
+    	 		);    
+    	 	raise exception '%', l_err;
+        --return -1;
+       end; 
+end;
+$function$
+;
+
+
+-- DROP FUNCTION pkg_eor_api.add_subj_rfl_mention(int4, int4, text, text, date, eor.idw_mr_rfl_attr_src, int2, int2);
+
+CREATE OR REPLACE FUNCTION pkg_eor_api.add_subj_rfl_mention(p_source_id integer, p_source_etalon_id integer, p_external_id text, p_external_h_id text, p_actual_date date, p_attributes eor.idw_mr_rfl_attr_src, p_priority smallint DEFAULT (50)::smallint, p_in_queue smallint DEFAULT (1)::smallint)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+#package
+declare
+  l_mention_id bigint;
+begin
+ 
+  l_mention_id := pkg_eor_aux.add_subj_rfl_mention(p_source_id, p_source_etalon_id, p_external_id, p_external_h_id, p_actual_date, p_attributes);
+ 
+  if p_in_queue = 1 and l_mention_id is not null then
+      insert into process_info.idw_sy_workflow_info (object_id, workflow_id, state_id, priority, create_date, state_date)
+      values (l_mention_id::text, 93, 931, p_priority, clock_timestamp(), clock_timestamp());
+  end if; 	 
+	    
+  return l_mention_id;
+end;
+$function$
+;
+
+
+
+-- DROP FUNCTION pkg_eor_aux.add_subj_rfl_mention(int4, int4, text, text, date, eor.idw_mr_rfl_attr_src);
+
+CREATE OR REPLACE FUNCTION pkg_eor_aux.add_subj_rfl_mention(p_source_id integer, p_source_etalon_id integer, p_external_id text, p_external_h_id text, p_actual_date date, p_attributes eor.idw_mr_rfl_attr_src)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+#package
+declare
+  l_mention_id bigint;
+  l_md5 text;
+begin
+ 
+  call pkg_eor_aux.add_rfl_attr_src(p_attributes, l_md5);
+ 
+  if p_attributes.mention_attribute_id is not null then
+	   l_mention_id := nextval('eor.idw_mr_subject_mention_seq');
+	  
+	   -- Вставляем запись об упоминании
+	   INSERT INTO eor.idw_mr_subject_mention(
+	    eor_subject_mention_id,
+	    create_date,
+	    mention_attribute_id,
+	    source_id,
+	    source_etalon_id,
+	    external_id,
+	    external_h_id,
+	    actual_date,
+	    --mention_md5,
+	    MENTION_ATTRIBUTE_MD5,
+	    eor_mention_type_id,
+		filial_sign
+	   ) VALUES (
+	    l_mention_id,
+	    clock_timestamp(),
+	    p_attributes.mention_attribute_id,
+	    p_source_id,
+	    p_source_etalon_id,
+	    p_external_id,
+	    p_external_h_id,
+	    p_actual_date,
+	    l_md5,
+	    3, -- РФЛ
+		'0'
+	   );
+
+  end if; 	 
+	    
+  return l_mention_id;
+end;
+$function$
+;
+
+
+-- DROP PROCEDURE pkg_eor_aux.add_rfl_attr_src(inout eor.idw_mr_rfl_attr_src, out text);
+
+CREATE OR REPLACE PROCEDURE pkg_eor_aux.add_rfl_attr_src(INOUT p_attributes eor.idw_mr_rfl_attr_src, OUT p_md5 text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $procedure$
+#package
+DECLARE
+  l_new BOOLEAN;
+begin autonomous
+	
+  p_md5 := pkg_eor_aux.get_rfl_attr_md5(p_attributes);
+
+  SELECT p_ret, p_new 
+	  INTO p_attributes.mention_attribute_id, l_new 
+  FROM pkg_eor_aux.get_mention_attr_id(p_md5);
+  
+  IF l_new THEN
+    INSERT INTO eor.idw_mr_rfl_attr_src
+    VALUES (p_attributes.*)
+    ON CONFLICT DO NOTHING;
+  END IF;
+END;
+$procedure$
+;
+
+
+-- DROP FUNCTION pkg_eor_api.add_subj_ifl_mention(int4, int4, text, text, date, eor.idw_mr_ifl_attr_src, int2, int2);
+
+CREATE OR REPLACE FUNCTION pkg_eor_api.add_subj_ifl_mention(p_source_id integer, p_source_etalon_id integer, p_external_id text, p_external_h_id text, p_actual_date date, p_attributes eor.idw_mr_ifl_attr_src, p_priority smallint DEFAULT (50)::smallint, p_in_queue smallint DEFAULT (1)::smallint)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+#package
+declare
+  l_mention_id bigint;
+begin
+ 
+  l_mention_id := pkg_eor_aux.add_subj_ifl_mention(p_source_id, p_source_etalon_id, p_external_id, p_external_h_id, p_actual_date, p_attributes);
+ 
+  if p_in_queue = 1 and l_mention_id is not null then
+      insert into process_info.idw_sy_workflow_info (object_id, workflow_id, state_id, priority, create_date, state_date)
+      values (l_mention_id::text, 96, 961, p_priority, clock_timestamp(), clock_timestamp());
+  end if; 	 
+	    
+  return l_mention_id;
+end;
+$function$
+;
+
+
+-- DROP FUNCTION pkg_eor_aux.add_subj_ifl_mention(int4, int4, text, text, date, eor.idw_mr_ifl_attr_src);
+
+CREATE OR REPLACE FUNCTION pkg_eor_aux.add_subj_ifl_mention(p_source_id integer, p_source_etalon_id integer, p_external_id text, p_external_h_id text, p_actual_date date, p_attributes eor.idw_mr_ifl_attr_src)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+#package
+declare
+  l_mention_id bigint;
+  l_md5 text;
+begin
+ 
+  call pkg_eor_aux.add_ifl_attr_src(p_attributes, l_md5);
+ 
+  if p_attributes.mention_attribute_id is not null then
+	  l_mention_id := nextval('eor.idw_mr_subject_mention_seq');
+	  
+	  -- Вставляем запись об упоминании
+	  INSERT INTO eor.idw_mr_subject_mention(
+	    eor_subject_mention_id,
+	    create_date,
+	    mention_attribute_id,
+	    source_id,
+	    source_etalon_id,
+	    external_id,
+	    external_h_id,
+	    actual_date,
+	    --mention_md5,
+	    MENTION_ATTRIBUTE_MD5,
+	    eor_mention_type_id
+	  ) VALUES (
+	    l_mention_id,
+	    clock_timestamp(),
+	    p_attributes.mention_attribute_id,
+	    p_source_id,
+	    p_source_etalon_id,
+	    p_external_id,
+	    p_external_h_id,
+	    p_actual_date,
+	    l_md5,
+	    7 -- ИФЛ
+	  );
+
+  end if; 	 
+	    
+  return l_mention_id;
+end;
+$function$
+;
+-- DROP PROCEDURE pkg_eor_aux.add_ifl_attr_src(inout eor.idw_mr_ifl_attr_src, out text);
+
+CREATE OR REPLACE PROCEDURE pkg_eor_aux.add_ifl_attr_src(INOUT p_attributes eor.idw_mr_ifl_attr_src, OUT p_md5 text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $procedure$
+#package
+DECLARE
+  l_new BOOLEAN;
+begin autonomous
+	
+  p_md5 := pkg_eor_aux.get_ifl_attr_md5(p_attributes);
+
+  SELECT p_ret, p_new 
+	  INTO p_attributes.mention_attribute_id, l_new 
+  FROM pkg_eor_aux.get_mention_attr_id(p_md5);
+  
+  IF l_new THEN
+    INSERT INTO eor.idw_mr_ifl_attr_src
+    VALUES (p_attributes.*)
+    ON CONFLICT DO NOTHING;
+  END IF;
+
+exception
+when others
+then
+	raise;
+END;
+$procedure$
+;
