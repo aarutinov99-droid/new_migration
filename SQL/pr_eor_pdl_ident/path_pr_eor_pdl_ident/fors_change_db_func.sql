@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS eor.tmp_eor_ident_candidate
 TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS eor.tmp_eor_ident_candidate
-    OWNER to "arutinov.a";
+    OWNER to r_fors_db_owner;
 
 COMMENT ON TABLE eor.tmp_eor_ident_candidate
     IS 'Временная таблица для хранения кандидатов при идентификации EOR для регламентного процесса EOR_PDL_IDENT';

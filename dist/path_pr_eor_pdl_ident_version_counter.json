@@ -1,0 +1,32 @@
+{
+  "source_name": "path_pr_eor_pdl_ident",
+  "source_path": "C:\\Users\\Arutinov.A\\Documents\\new_migration\\SQL\\pr_eor_pdl_ident\\path_pr_eor_pdl_ident",
+  "build": 4,
+  "last_version": "0.0.4",
+  "history": [
+    {
+      "build": 1,
+      "version": "0.0.1",
+      "archive": "path_pr_eor_pdl_ident-v0.0.1-b1.zip",
+      "created": "2026-09-15T09:35:01"
+    },
+    {
+      "build": 2,
+      "version": "0.0.2",
+      "archive": "path_pr_eor_pdl_ident-v0.0.2-b2.zip",
+      "created": "2026-09-15T09:37:31"
+    },
+    {
+      "build": 3,
+      "version": "0.0.3",
+      "archive": "path_pr_eor_pdl_ident-v0.0.3-b3.zip",
+      "created": "2026-09-15T09:37:33"
+    },
+    {
+      "build": 4,
+      "version": "0.0.4",
+      "archive": "path_pr_eor_pdl_ident-v0.0.4-b4.zip",
+      "created": "2026-09-15T09:37:34"
+    }
+  ]
+}

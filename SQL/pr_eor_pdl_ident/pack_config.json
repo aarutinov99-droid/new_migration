@@ -1,0 +1,14 @@
+{
+  "output_dir":   "./dist",
+  "counter_file": "./state/patch_version_counter.json",
+  "tool":         "7z",
+  "tool_path":    null,
+  "name":         null,
+  "level":        9,
+  "include_root": true,
+  "password":     null,
+  "timestamp":    false,
+  "bump":         "patch",
+  "version":      null,
+  "no_build":     false
+}
